@@ -265,3 +265,43 @@ def test_init_db_adds_columns_to_legacy_table(tmp_path) -> None:
     with engine.connect() as connection:
         row = connection.execute(text("SELECT priority, due_date FROM tasks")).one()
     assert row == ("medium", None)
+
+
+def test_add_missing_columns_tolerates_concurrent_upgrade(tmp_path, monkeypatch) -> None:
+    """A column added by another worker between inspection and ALTER is not an error.
+
+    @author Alfie
+    """
+    import sqlalchemy
+    from sqlalchemy import create_engine, text
+
+    from app import db as db_module
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'race.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE tasks (id INTEGER PRIMARY KEY, title VARCHAR(200))"))
+
+    stale_inspector = sqlalchemy.inspect(engine)
+    stale_columns = stale_inspector.get_columns("tasks")
+    with engine.begin() as connection:
+        connection.execute(text("ALTER TABLE tasks ADD COLUMN priority VARCHAR(16)"))
+
+    real_inspect = db_module.inspect
+    calls = {"count": 0}
+
+    class StaleFirst:
+        def __init__(self, bind):
+            self._inspector = real_inspect(bind)
+
+        def get_columns(self, table):
+            calls["count"] += 1
+            if calls["count"] == 1:
+                return stale_columns
+            return self._inspector.get_columns(table)
+
+    monkeypatch.setattr(db_module, "inspect", StaleFirst)
+
+    db_module._add_missing_task_columns(engine)
+
+    columns = {column["name"] for column in real_inspect(engine).get_columns("tasks")}
+    assert {"priority", "due_date"} <= columns

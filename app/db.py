@@ -6,6 +6,7 @@
 from collections.abc import Generator
 
 from sqlalchemy import Engine, create_engine, inspect, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DATABASE_URL = "sqlite:///./tasks.db"
@@ -65,7 +66,14 @@ def _add_missing_task_columns(bind: Engine) -> None:
         "priority": "ALTER TABLE tasks ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'medium'",
         "due_date": "ALTER TABLE tasks ADD COLUMN due_date DATE",
     }
-    with bind.begin() as connection:
-        for name, statement in statements.items():
-            if name not in existing:
+    for name, statement in statements.items():
+        if name in existing:
+            continue
+        try:
+            with bind.begin() as connection:
                 connection.execute(text(statement))
+        except OperationalError:
+            # Another worker may have added the column after our inspection.
+            current = {column["name"] for column in inspect(bind).get_columns("tasks")}
+            if name not in current:
+                raise
