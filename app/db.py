@@ -6,6 +6,7 @@
 from collections.abc import Generator
 
 from sqlalchemy import create_engine, inspect, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DATABASE_URL = "sqlite:///./tasks.db"
@@ -52,24 +53,34 @@ def init_db() -> None:
     _add_missing_task_columns()
 
 
+def _task_column_names() -> set[str]:
+    """Return the column names currently present on the ``tasks`` table.
+
+    @author Alfie
+    """
+    return {column["name"] for column in inspect(engine).get_columns("tasks")}
+
+
 def _add_missing_task_columns() -> None:
     """Add ``priority`` / ``due_date`` to a ``tasks.db`` created before they existed.
 
     ``create_all`` never alters existing tables, so older local databases are
-    upgraded in place here.
+    upgraded in place here. Another worker may add a column between the check
+    and the ``ALTER``; that duplicate-column failure is ignored.
 
     @author Alfie
     """
-    existing = {column["name"] for column in inspect(engine).get_columns("tasks")}
-    statements = []
-    if "priority" not in existing:
-        statements.append(
-            "ALTER TABLE tasks ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'medium'"
-        )
-    if "due_date" not in existing:
-        statements.append("ALTER TABLE tasks ADD COLUMN due_date DATE")
-    if not statements:
-        return
-    with engine.begin() as connection:
-        for statement in statements:
-            connection.execute(text(statement))
+    missing_columns = {
+        "priority": "ALTER TABLE tasks ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'medium'",
+        "due_date": "ALTER TABLE tasks ADD COLUMN due_date DATE",
+    }
+    existing = _task_column_names()
+    for column, statement in missing_columns.items():
+        if column in existing:
+            continue
+        try:
+            with engine.begin() as connection:
+                connection.execute(text(statement))
+        except OperationalError:
+            if column not in _task_column_names():
+                raise

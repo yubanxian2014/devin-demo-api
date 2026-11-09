@@ -329,3 +329,41 @@ def test_init_db_upgrades_legacy_tasks_table(tmp_path, monkeypatch) -> None:
     with engine.connect() as connection:
         row = connection.execute(text("SELECT priority, due_date FROM tasks")).one()
     assert row == ("medium", None)
+
+
+def test_init_db_tolerates_concurrent_legacy_upgrade(tmp_path, monkeypatch) -> None:
+    """A column added by another worker after the check does not abort startup.
+
+    @author Alfie
+    """
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "CREATE TABLE tasks ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, title VARCHAR(200) NOT NULL, "
+                "description TEXT, status VARCHAR(16) NOT NULL, "
+                "created_at DATETIME NOT NULL, updated_at DATETIME NOT NULL)"
+            )
+        )
+    monkeypatch.setattr(db_module, "engine", engine)
+    real_column_names = db_module._task_column_names
+    calls = {"count": 0}
+
+    def stale_then_real() -> set[str]:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            names = real_column_names()
+            with engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE tasks ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'medium'")
+                )
+            return names
+        return real_column_names()
+
+    monkeypatch.setattr(db_module, "_task_column_names", stale_then_real)
+
+    db_module.init_db()
+
+    assert {"priority", "due_date"} <= real_column_names()
+
