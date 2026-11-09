@@ -3,11 +3,12 @@
 @author Alfie
 """
 
-from datetime import datetime
+from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import TaskStatus
+from app.models import TaskPriority, TaskStatus
 
 
 class TaskCreate(BaseModel):
@@ -19,6 +20,8 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus = TaskStatus.todo
+    priority: TaskPriority = TaskPriority.medium
+    due_date: date | None = None
 
     @field_validator("title")
     @classmethod
@@ -42,6 +45,21 @@ class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus | None = None
+    priority: TaskPriority | None = None
+    due_date: date | None = None
+
+    @field_validator("status", "priority")
+    @classmethod
+    def enum_fields_must_not_be_null(cls, value: Enum | None) -> Enum:
+        """Reject an explicit ``null`` for fields that always need a value.
+
+        Omitting the field leaves it unchanged; only ``due_date`` may be cleared.
+
+        @author Alfie
+        """
+        if value is None:
+            raise ValueError("must not be null")
+        return value
 
     @field_validator("title")
     @classmethod
@@ -70,5 +88,7 @@ class TaskRead(BaseModel):
     title: str
     description: str | None
     status: TaskStatus
+    priority: TaskPriority
+    due_date: date | None
     created_at: datetime
     updated_at: datetime

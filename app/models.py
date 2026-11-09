@@ -1,16 +1,12 @@
 """ORM models for the task board.
 
-The baseline model intentionally has no priority or due-date fields: the
-multi-repository Devin demo asks the agent to add them across the API and the
-web client.
-
 @author Alfie
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import Date, DateTime, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -35,6 +31,17 @@ class TaskStatus(str, Enum):
     done = "done"
 
 
+class TaskPriority(str, Enum):
+    """Allowed task priorities.
+
+    @author Alfie
+    """
+
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
 class Task(Base):
     """A single task in the board.
 
@@ -51,6 +58,13 @@ class Task(Base):
         nullable=False,
         default=TaskStatus.todo.value,
     )
+    priority: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        default=TaskPriority.medium.value,
+        server_default=TaskPriority.medium.value,
+    )
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
