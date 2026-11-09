@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app import repository
 from app.db import get_db
-from app.models import TaskStatus
+from app.models import TaskPriority, TaskStatus
 from app.schemas import TaskCreate, TaskRead, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -17,13 +17,14 @@ router = APIRouter(prefix="/tasks", tags=["tasks"])
 @router.get("", response_model=list[TaskRead])
 def list_tasks(
     status_filter: TaskStatus | None = Query(default=None, alias="status"),
+    priority: TaskPriority | None = Query(default=None),
     db: Session = Depends(get_db),
 ) -> list[TaskRead]:
-    """List tasks, optionally filtered by status.
+    """List tasks, optionally filtered by status and priority.
 
     @author Alfie
     """
-    return repository.list_tasks(db, status_filter)
+    return repository.list_tasks(db, status_filter, priority)
 
 
 @router.post("", response_model=TaskRead, status_code=status.HTTP_201_CREATED)

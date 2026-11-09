@@ -3,11 +3,30 @@
 @author Alfie
 """
 
-from datetime import datetime
+import re
+from datetime import date, datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models import TaskStatus
+from app.models import TaskPriority, TaskStatus
+
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _require_iso_date_string(value: object) -> object:
+    """Only accept ``YYYY-MM-DD`` strings (or ``None``) for due dates.
+
+    Pydantic's lax ``date`` parsing would otherwise accept epoch numbers and
+    datetime strings.
+
+    @author Alfie
+    """
+    if value is None:
+        return None
+    if not isinstance(value, str) or not _ISO_DATE.fullmatch(value):
+        raise ValueError("due_date must be a YYYY-MM-DD string")
+    return value
 
 
 class TaskCreate(BaseModel):
@@ -19,6 +38,17 @@ class TaskCreate(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus = TaskStatus.todo
+    priority: TaskPriority = TaskPriority.medium
+    due_date: date | None = None
+
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def due_date_must_be_iso_string(cls, value: object) -> object:
+        """Reject due dates that are not ``YYYY-MM-DD`` strings.
+
+        @author Alfie
+        """
+        return _require_iso_date_string(value)
 
     @field_validator("title")
     @classmethod
@@ -42,6 +72,30 @@ class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus | None = None
+    priority: TaskPriority | None = None
+    due_date: date | None = None
+
+    @field_validator("due_date", mode="before")
+    @classmethod
+    def due_date_must_be_iso_string(cls, value: object) -> object:
+        """Reject due dates that are not ``YYYY-MM-DD`` strings.
+
+        @author Alfie
+        """
+        return _require_iso_date_string(value)
+
+    @field_validator("status", "priority")
+    @classmethod
+    def enum_fields_must_not_be_null(cls, value: Enum | None) -> Enum:
+        """Reject an explicit ``null`` for fields that always need a value.
+
+        Omitting the field leaves it unchanged; only ``due_date`` may be cleared.
+
+        @author Alfie
+        """
+        if value is None:
+            raise ValueError("must not be null")
+        return value
 
     @field_validator("title")
     @classmethod
@@ -70,5 +124,7 @@ class TaskRead(BaseModel):
     title: str
     description: str | None
     status: TaskStatus
+    priority: TaskPriority
+    due_date: date | None
     created_at: datetime
     updated_at: datetime
