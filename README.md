@@ -1,9 +1,7 @@
 # devin-demo-api
 
 A deliberately small task board API used as the backend half of a
-multi-repository Devin demo. The baseline has no priority or due-date fields:
-the demo requirement asks Devin to add them across this repository and
-`devin-demo-web`.
+multi-repository Devin demo. The matching frontend lives in `devin-demo-web`.
 
 ## Stack
 
@@ -22,14 +20,25 @@ uvicorn app.main:app --reload
 ```
 
 The API listens on `http://127.0.0.1:8000`. Tables are created on startup in
-`tasks.db`.
+`tasks.db`. Older `tasks.db` files are upgraded in place with the `priority`
+and `due_date` columns.
+
+## Task fields
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `title` | string | Required, 1–200 chars, not blank |
+| `description` | string \| null | Up to 2000 chars |
+| `status` | `todo` \| `doing` \| `done` | Defaults to `todo` |
+| `priority` | `low` \| `medium` \| `high` | Defaults to `medium`; cannot be `null` on update |
+| `due_date` | `YYYY-MM-DD` \| null | Optional; send `null` on PATCH to clear it |
 
 ## Endpoints
 
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/health` | Liveness probe |
-| GET | `/tasks` | List tasks; optional `?status=todo\|doing\|done` |
+| GET | `/tasks` | List tasks; optional `?status=todo\|doing\|done` and `?priority=low\|medium\|high` |
 | POST | `/tasks` | Create a task |
 | GET | `/tasks/{id}` | Fetch one task |
 | PATCH | `/tasks/{id}` | Partially update a task |
@@ -40,10 +49,3 @@ The API listens on `http://127.0.0.1:8000`. Tables are created on startup in
 ```bash
 pytest
 ```
-
-## Demo requirement (not implemented on purpose)
-
-Add `priority` (`low` / `medium` / `high`) and `due_date` to tasks, validate
-them at the API boundary, return them from every endpoint, and cover the new
-behaviour with pytest. The matching frontend change lives in
-`devin-demo-web`.
