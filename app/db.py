@@ -5,7 +5,7 @@
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 DATABASE_URL = "sqlite:///./tasks.db"
@@ -49,3 +49,27 @@ def init_db() -> None:
     from app import models  # noqa: F401  (register models)
 
     Base.metadata.create_all(bind=engine)
+    _add_missing_task_columns()
+
+
+def _add_missing_task_columns() -> None:
+    """Add ``priority`` / ``due_date`` to a ``tasks.db`` created before they existed.
+
+    ``create_all`` never alters existing tables, so older local databases are
+    upgraded in place here.
+
+    @author Alfie
+    """
+    existing = {column["name"] for column in inspect(engine).get_columns("tasks")}
+    statements = []
+    if "priority" not in existing:
+        statements.append(
+            "ALTER TABLE tasks ADD COLUMN priority VARCHAR(16) NOT NULL DEFAULT 'medium'"
+        )
+    if "due_date" not in existing:
+        statements.append("ALTER TABLE tasks ADD COLUMN due_date DATE")
+    if not statements:
+        return
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))

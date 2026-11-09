@@ -11,18 +11,24 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Task, TaskStatus
+from app.models import Task, TaskPriority, TaskStatus
 from app.schemas import TaskCreate, TaskUpdate
 
 
-def list_tasks(db: Session, status: TaskStatus | None = None) -> list[Task]:
-    """Return tasks, newest first, optionally filtered by status.
+def list_tasks(
+    db: Session,
+    status: TaskStatus | None = None,
+    priority: TaskPriority | None = None,
+) -> list[Task]:
+    """Return tasks, newest first, optionally filtered by status and priority.
 
     @author Alfie
     """
     statement = select(Task).order_by(Task.created_at.desc(), Task.id.desc())
     if status is not None:
         statement = statement.where(Task.status == status.value)
+    if priority is not None:
+        statement = statement.where(Task.priority == priority.value)
     return list(db.scalars(statement))
 
 
@@ -43,6 +49,8 @@ def create_task(db: Session, payload: TaskCreate) -> Task:
         title=payload.title,
         description=payload.description,
         status=payload.status.value,
+        priority=payload.priority.value,
+        due_date=payload.due_date,
     )
     db.add(task)
     db.commit()
@@ -58,6 +66,8 @@ def update_task(db: Session, task: Task, payload: TaskUpdate) -> Task:
     changes = payload.model_dump(exclude_unset=True)
     if "status" in changes and changes["status"] is not None:
         changes["status"] = changes["status"].value
+    if "priority" in changes and changes["priority"] is not None:
+        changes["priority"] = changes["priority"].value
     for field, value in changes.items():
         setattr(task, field, value)
     task.updated_at = datetime.now(timezone.utc)
