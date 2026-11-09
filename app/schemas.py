@@ -21,7 +21,7 @@ class TaskCreate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus = TaskStatus.todo
     priority: TaskPriority = TaskPriority.medium
-    due_date: date | None = None
+    due_date: date | None = Field(default=None, strict=True)
 
     @field_validator("title")
     @classmethod
@@ -46,7 +46,7 @@ class TaskUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=2000)
     status: TaskStatus | None = None
     priority: TaskPriority | None = None
-    due_date: date | None = None
+    due_date: date | None = Field(default=None, strict=True)
 
     @field_validator("status", "priority")
     @classmethod

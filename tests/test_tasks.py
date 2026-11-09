@@ -225,9 +225,12 @@ def test_reject_invalid_due_date(client: TestClient) -> None:
 
     @author Alfie
     """
-    for value in ["tomorrow", "2026-02-30", "2026/12/01"]:
+    for value in ["tomorrow", "2026-02-30", "2026/12/01", "2026-12-01T00:00:00", 0, 1700000000]:
         response = client.post("/tasks", json={"title": "x", "due_date": value})
         assert response.status_code == 422, value
+    created = create_task(client)
+    response = client.patch(f"/tasks/{created['id']}", json={"due_date": 0})
+    assert response.status_code == 422
 
 
 def test_init_db_adds_columns_to_legacy_table(tmp_path) -> None:
